@@ -1,0 +1,249 @@
+/*
+//whith this code you can use grbl 
+//without using pc 
+//we are using two arduino unos https://www.arduino.cc/en/Main/ArduinoBoardUno
+//one for grbl and other for 
+//gcode sending from sd crad
+//In this implementation  we are using a grbl shield attached to the first arduino, and an SD card shield on the second arduino
+
+Author: Joshua and Jacob Konstantinos. Adapted from code written by magansoma http://headlesscnc.blogspot.com/
+Note :We dont take any responsibility for any kind of dmaage or anything else its upto you
+you can use or modify this code its opensource  
+*/
+
+#include <SD.h>   // The SD library allows for reading from and writing to SD cards. https://www.arduino.cc/en/Reference/SD
+#include <SPI.h>  // This library allows you to communicate with SPI devices, with the Arduino as the master device. https://www.arduino.cc/en/Reference/SPI
+
+File myFile;  // This names the instance of the open file "myFile". You can only have one file open at a time with the SD library.
+
+String x_move, y_move,z_move,gcode_value;   // Several strings are created here. PURPOSE YET UNKNOWN.
+String homing_gcode;
+char get_ok;								// this has something to do with the SPI communiation with the grbl ardunio. https://www.arduino.cc/en/Reference/Char
+int ok_word;
+
+
+
+/// Several pins on the arduino. Function UNKNOWN
+const int x_plus = 2;
+const int x_minus=  3;
+const int y_plus= 5;
+const int y_minus= 6;
+const int z_plus= 7;
+const int z_minus= 8;
+const int home_button=9;
+const int send_button=10;
+
+int x_count=0;
+int y_count=0;
+int z_count=0;
+int grbl_rx_buffer;
+
+int rx_buffer_check_rate=500;//rx buffer check rate 500 millisecond
+
+String machine_status="";
+int machine_flag=0;
+const int rx_buffer_limit =64;//arduino has 128 is 127 byte of buffer 
+//so we are here giving less then 127 buffer limit
+
+String get_rx=" ";//this ensures that first gecode doesnt send 
+int rx_data=0;//////until Rx buffer is cheked or there is no rx tx connection
+////////200 which less then 127 so first time buffer is checked with 200 
+/////so after second loop it gets its readed value from rxbuffer
+
+int gecode_send_delay=100;//////
+//////////so this will put some delay fofre sending next g code
+////this may pervent some problem when we lost rx tx connection 
+/////so that time insted of sending g code at full speed this will put some delay
+
+int test = 0;
+
+
+
+
+
+
+
+///THIS MARKS THE BEGINING OF THE SETUP LOOP///
+
+
+void setup()
+{
+  pinMode(x_plus, INPUT);   //Sets the ardunio pin x_plus (pin 5) as an input. reason unknown - note that this pin is not wired to anything
+ 
+ 
+ 
+ // Open serial communications and wait for port to open:
+  Serial.begin(115200);  //this is the baud rate for the grbl shield 
+   while (!Serial) {
+    ; // wait for serial port to connect. Needed for Leonardo only
+  }
+  
+  
+  
+  
+  
+/////////////////sd card initializtion  starts here///
+
+  Serial.print("Initializing SD card...");
+  // On the Ethernet Shield, CS is pin 4. It's set as an output by default.
+  // Note that even if it's not used as the CS pin, the hardware SS pin 
+  // (10 on most Arduino boards, 53 on the Mega) must be left as an output 
+  // or the SD library functions will not work. 
+   pinMode(10, OUTPUT);
+   
+  if (!SD.begin(4)) {                    //  Initializes the SD library and card. the "!" means not - so if the SD.begin is not true - then print that it failed
+										 // Returns true on success; false on failure https://www.arduino.cc/en/Reference/SDbegin
+    Serial.println("initialization failed!");
+    return;
+  }
+  Serial.println("initialization done.");  // If SD.begin is true, print this line.
+  
+  
+ 
+  // open the file. note that only one file can be open at a time,
+  // so you have to close this one before opening another.
+  myFile = SD.open("test.txt", FILE_WRITE);
+
+  
+  // if the file opened okay, write to it:
+  if (myFile) {
+    Serial.print("Writing to test.txt...");
+    myFile.println("testing is cool");
+ // close the file:
+    myFile.close();
+    Serial.println("done.");
+  } else {
+    // if the file didn't open, print an error:
+    Serial.println("error opening test.txt");
+  }
+  
+  ////////// sd card initializtion ends here////////////////////
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  //FUNCTION UNKNOWN//
+  
+  digitalWrite(x_plus,HIGH);
+  digitalWrite(x_minus,HIGH);
+  digitalWrite(y_plus,HIGH);
+  digitalWrite(y_minus,HIGH);
+  digitalWrite(z_plus,HIGH);
+  digitalWrite(z_minus,HIGH);
+  digitalWrite(home_button,HIGH);
+  digitalWrite( send_button,HIGH);
+ 
+  x_move = String("G0X");
+  y_move = String("G0Y");
+  z_move = String("G0Z");
+  homing_gcode= String("G0X0Y0Z0");
+  String gcode_value = String("");
+  String get_ok= String();
+  
+}
+
+
+
+
+// VOID LOOP BEGINS HERE // 
+
+void loop()
+{
+	//This is an attempt to keet the gcode from looping. it first tests if the variable test is greater than 2
+	if (test > 2) {
+		return;   //                      https://www.arduino.cc/en/Reference/Return
+	}
+	
+
+///The return keyword is handy to test a section of code without having to "comment out" large sections of possibly buggy code.
+/*
+void loop(){
+
+// brilliant code idea to test here
+
+return;
+
+// the rest of a dysfunctional sketch here
+// this code will never be executed
+}
+*/	
+	
+	
+	
+	
+// Creates a string "1_line" then opens the file called "circle.text" on the SD card. While their is still data in the file, it it puts the value found
+// in the fist line (reads the line until \n) in the string "1_line"	
+	
+   String l_line = "";
+  //opens the file here
+   myFile = SD.open("circle.txt");
+   while (myFile.available() != 0) {           //https://www.arduino.cc/en/Reference/FileAvailable
+	   //A inconsistent line length may lead to heap memory fragmentation    
+	   l_line = myFile.readStringUntil('\n');    
+	   if (l_line == "thatsallfolks") //no blank lines are anticipated    
+	   exit(0);   
+		
+
+		
+		
+		
+		
+		
+		
+	 ///// G code flow control starts here /////////////   
+	   //////this checks ok is sent by grbl 
+	   ////it stays here untill ok is recived 
+	   ///it checks ok  from ok reading string is
+	  // not worked here  may be its taking too much times so it may miss some "ok"
+	  // from grbl
+	   //////////gcode flow control strats here
+	   
+	  /// three method to gcode flow control
+	   //// MEHOD 1(GOOD MEHOD )  ok method only reading o character
+	   ///below two method needs rx buffer setting on  by $10=8 in grbl 
+	   /////we can recheck it by $$ 
+	   /// MEHOD2 (work slow) desition based on 
+	   ////reading run idle in string legth measurement
+	   ///MEHOD 3 (works but some bug) extracting number from string 
+	   
+	   
+	   //////<<<<<<<<<<<<<this line sends g code >>>>>>>>>>>>>>>>>>>
+	   Serial.println(l_line);
+	   
+	 /////////<<<<<<<<<<<above lines sends g code >>>>>>>>>>>>>>>>>>  
+	   
+	   ////////////reading one character MEHOD 1 
+	   //this mehod is first send g code 
+	   //and check responce after  gcode sent 
+	  ////with ok massage from grbl 
+	  while(1){                     //infinite loop>
+	  
+	   get_ok = Serial.read();
+	  
+	   if (get_ok == 'o'){ 
+		 get_ok=' ';
+		break;
+		
+	   }
+	   
+	  }
+	  
+	///////////////gcode flow control ends here////////
+	 
+	  delay(gecode_send_delay);//////smooth opration in gcode sending 
+
+  }
+
+//this closes file 
+myFile.close();
+test++;
+delay(1000);//may need some refresh time
+/////to SD CARD after closing file 
+/////////////total program completes here 
+///put here want you wqant to do after programme compltes  delay(1000); 
+}
